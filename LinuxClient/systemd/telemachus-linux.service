@@ -1,0 +1,14 @@
+[Unit]
+Description=Telemachus Linux client (Mac display receiver)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/Telemachus/LinuxClient/telemachus-linux
+Restart=on-failure
+RestartSec=3
+Environment=SDL_VIDEODRIVER=wayland
+
+[Install]
+WantedBy=default.target

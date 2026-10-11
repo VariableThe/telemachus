@@ -48,6 +48,8 @@ build/
 dist/
 *.o
 *.dSYM/
+__pycache__/
+*.pyc
 
 # Env
 .env
