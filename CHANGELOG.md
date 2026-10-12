@@ -18,6 +18,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+<a id="v0.0.5-experimental-graceful-shutdown"></a>
+## [v0.0.5-experimental-graceful-shutdown] - 2026-07-24
+
+### Added
+- When the Mac host stops intentionally, it sends a one-byte wire shutdown
+  message (type 3) before closing TCP. The Android client exits cleanly
+  instead of looping on “Looking for your Mac…”. Crash or kill paths still
+  reconnect as before. Contributed by @VariableThe (#19 / #20, closes #18).
+
+---
+
+<a id="v0.0.4-experimental-16kb-tcc"></a>
+## [v0.0.4-experimental-16kb-tcc] - 2026-07-21
+
+### Fixed
+- Bump Android CameraX from 1.3.1 to 1.4.2 so
+  `libimage_processing_util_jni.so` ships with 16 KB ELF LOAD alignment.
+  AGP zip alignment alone could not clear the Android 15+
+  “LOAD segment not aligned” warning for that prebuilt library.
+- After a rebuild or re-sign, the permissions recovery banner now tells
+  users to remove Telemachus with `−` and re-add with `+` (or relaunch
+  for a fresh prompt). Uncheck → check often keeps the stale TCC grant.
+
+---
+
+<a id="v0.0.3-experimental-settings-fixes"></a>
+## [v0.0.3-experimental-settings-fixes] - 2026-07-21
+
+### Added
+- Optional **Hide Dock icon** preference so the Mac host can run as a menu
+  bar–only utility while keeping the Dock icon as the default.
+- After a rebuild or re-sign, the Status panel can show a permissions recovery
+  banner with System Settings deep links for Screen Recording and Accessibility
+  (no admin `tccutil` reset).
+- Android packaging sets AGP `android.nativeLibraryAlignmentPageSize` to `16k`
+  for 16 KB page-size devices.
+
+### Fixed
+- The refresh-rate compatibility message no longer hardcodes the developer
+  SM-P610 tablet. Connected Android clients report model and max panel Hz
+  (capability-negotiated wire types 12 → 11), and Settings shows live green or
+  orange guidance.
+- Fractional panel modes such as 59.94 Hz / 119.88 Hz are rounded before the
+  Mac compares them to the picker values.
+- Stale connected-device info is cleared when a new client is admitted, not only
+  on disconnect.
+
+---
+
 <a id="v0.0.2-experimental-icons-fix"></a>
 ## [v0.0.2-experimental-icons-fix] - 2026-07-20
 

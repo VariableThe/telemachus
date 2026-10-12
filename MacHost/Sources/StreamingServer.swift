@@ -17,6 +17,19 @@ private enum WireMessage {
     /// clients that sent clientAvcOnly — old clients disconnect on unknown
     /// message types, so this must never be sent unsolicited.
     static let codecSelected: UInt8 = 10
+    /// Client→server, 66-byte message: type + 64-byte null-padded UTF-8 model
+    /// name + 1-byte max refresh rate (Hz). Sent only after the host accepts
+    /// via `hostAcceptsDeviceInfo` so older Macs never see the payload.
+    static let clientDeviceInfo: UInt8 = 11
+    /// Payload-free capability handshake. Client offers; host accepts only if
+    /// it understands type 11. Older hosts consume the offer as 1 unknown byte
+    /// and never reply, so the client skips the payload.
+    static let deviceInfoCapability: UInt8 = 12
+    /// Server→client, payload-free: server shutting down intentionally.
+    /// Client should close without attempting reconnect.
+    /// Uses the free slot 3 (between touch=2 and ping=4). Do not use 12 —
+    /// that is `deviceInfoCapability` and would trigger device-info send.
+    static let serverShutdown: UInt8 = 3
 }
 
 private extension NWEndpoint {
@@ -76,6 +89,8 @@ class StreamingServer {
 
     var onWirelessClientPaired: ((String) -> Void)?
     var onServerFailed: ((Error) -> Void)?
+    /// Fired when the Android client reports Build.MODEL + max panel Hz.
+    var onDeviceInfoReceived: ((String, UInt8) -> Void)?
 
     private let frameQueue = DispatchQueue(label: "frameQueue", qos: .userInteractive)
     private let receiveQueue = DispatchQueue(label: "receiveQueue", qos: .userInteractive)
@@ -628,6 +643,25 @@ class StreamingServer {
                     debugLog("Client is AVC-only — will negotiate H.264")
                 }
 
+            case WireMessage.deviceInfoCapability:
+                // Payload-free offer from a client that can send type 11.
+                // Reply with the same type so the client knows it is safe to
+                // send the 66-byte payload. Older hosts never reach this case.
+                consumeInputBytes(1)
+                let accept = Data([WireMessage.deviceInfoCapability])
+                connection.send(content: accept, completion: .contentProcessed { _ in })
+                debugLog("Accepted device-info capability; waiting for type 11 payload")
+
+            case WireMessage.clientDeviceInfo:
+                // 66 bytes: 1 type + 64 null-padded model name + 1 refresh rate.
+                guard inputBuffer.count >= 66 else { return }
+                let modelData = Data(inputBuffer.dropFirst().prefix(64))
+                let model = String(data: modelData.prefix(while: { $0 != 0 }), encoding: .utf8) ?? "Unknown"
+                let refreshRate = inputByte(at: 65)
+                consumeInputBytes(66)
+                debugLog("Received device info: model=\(model), refreshRate=\(refreshRate)Hz")
+                onDeviceInfoReceived?(model, refreshRate)
+
             default:
                 debugLog("Unknown client input type: \(msgType)")
                 consumeInputBytes(1)
@@ -857,6 +891,19 @@ class StreamingServer {
             pendingFrame = nil
         }
         receiveQueue.sync {}
+
+        // Notify the client before aborting TCP. `cancel()` is forceful and can
+        // RST unacked bytes, so wait for contentProcessed (up to 500ms) and then
+        // settle briefly so the peer can read type 3 before the socket dies.
+        if let conn = connection, connectionReady {
+            let shutdownMsg = Data([WireMessage.serverShutdown])
+            let semaphore = DispatchSemaphore(value: 0)
+            conn.send(content: shutdownMsg, completion: .contentProcessed { _ in
+                semaphore.signal()
+            })
+            _ = semaphore.wait(timeout: .now() + .milliseconds(500))
+            Thread.sleep(forTimeInterval: 0.05)
+        }
 
         connection?.cancel()
         listener?.cancel()
